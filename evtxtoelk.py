@@ -44,17 +44,9 @@ class EvtxToElk:
         can_add_new_items = False
         i = 0
 
-        # es = Elasticsearch([elk_ip]) ## TODO Décommenter à la fin
-        # TODO DONE Récupérer le dernier item d'un fichier genre 'last_timestamp.txt'
+        es = Elasticsearch([elk_ip])
         try:
-            # last_record = open("./last_record.txt", "r").read().split('\n')
             last_record = ''.join(open('last_record.txt').read().split('\n'))
-            # try:
-            #     last_record = xmltodict.parse(last_record_xml)
-            #     last_record_timestamp = last_record.get("Event").get("System").get("TimeCreated").get("@SystemTime")
-            # except:
-            #     print("Couldn't parse the XML file, cannot compare the timestamp, exiting.")
-            #     exit(42)
         except:
             print("No records found, will index everything")
             can_add_new_items = True
@@ -140,47 +132,23 @@ class EvtxToElk:
                             #    "body": json.loads(json.dumps(log_line)),
                             #    "metadata": metadata
                             # })
-                            with open('./append.json', "a") as appendjson:
-                                appendjson.write(str(event_data))
-                            appendjson.close()
+                            # with open('./append.json', "a") as appendjson: ## TODO Enlever ça à l'occasion
+                            #     appendjson.write(str(event_data))
+                            # appendjson.close()
 
                             if len(bulk_queue) == bulk_queue_len_threshold:
                                 print('Bulkingrecords to ES: ' + str(len(bulk_queue)))
                                 # start parallel bulking to ElasticSearch, default 500 chunks;
-                                # if EvtxToElk.bulk_to_elasticsearch(es, bulk_queue): ## TODO Décommenter ça
-                                #     bulk_queue = []
-                                # else:
-                                #     print('Failed to bulk data to Elasticsearch')
-                                #     sys.exit(1)
+                                if EvtxToElk.bulk_to_elasticsearch(es, bulk_queue):
+                                    bulk_queue = []
+                                else:
+                                    print('Failed to bulk data to Elasticsearch')
+                                    sys.exit(1)
 
-                        # TODO Si le timestamp sauvegardé correspond à celui là, set "can_add_new_items" à true
                         else:
                             # if i == 76:
                             #     print("SAVING")
                             #     save_last_record(xml)
-                            # if i == 44:
-                            #     print("-=-=-=-")
-                            #     s_array = xml.split("\n")
-                            #     for idx, val in enumerate(s_array):
-                            #         print("line " + str(idx + 1) + " : " + str(len(val)) + " >>" + val)
-                            #         if idx+1 == 20:
-                            #             print("ONE")
-                            #             it = 0
-                            #             while it != len(val):
-                            #                 print(str(ord(val[it])) + " ("+val[it]+")")
-                            #                 it += 1
-                            #             print("/ONE")
-                            #     print("=====")
-                            #     last_record_array = last_record.split("\n")
-                            #     for idx, val in enumerate(last_record_array):
-                            #         print("line " + str(idx + 1) + " : " + str(len(val)) + " >>" + val)
-                            #         if idx + 1 == 20:
-                            #             print("TWO")
-                            #             it = 0
-                            #             while it != len(val):
-                            #                 print(str(ord(val[it])) + " ("+val[it]+")")
-                            #                 it += 1
-                            #             print("/TWO")
                             if compare_xml == last_record:
                                 print("Yes")
                                 can_add_new_items = True
@@ -206,11 +174,11 @@ class EvtxToElk:
                 # Check for any remaining records in the bulk queue
                 if len(bulk_queue) > 0:
                     print('Bulking final set of records to ES: ' + str(len(bulk_queue)))
-                    # if EvtxToElk.bulk_to_elasticsearch(es, bulk_queue): ## TODO Décommenter ça
-                    #     bulk_queue = []
-                    # else:
-                    #     print('Failed to bulk data to Elasticsearch')
-                    #     sys.exit(1)
+                    if EvtxToElk.bulk_to_elasticsearch(es, bulk_queue):
+                        bulk_queue = []
+                    else:
+                        print('Failed to bulk data to Elasticsearch')
+                        sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -225,4 +193,4 @@ if __name__ == "__main__":
     # # Parse arguments and call evtx to elk class
     # args = parser.parse_args()
     # EvtxToElk.evtx_to_elk(args.evtxfile, args.elk_ip, elk_index=args.i, bulk_queue_len_threshold=int(args.s), metadata=args.meta)
-    EvtxToElk.evtx_to_elk("./test/pre-Security.evtx", "localhost", "hostlogs", 500, {})
+    EvtxToElk.evtx_to_elk("./test/pre-Security.evtx", "localhost", elk_index="hostlogs", bulk_queue_len_threshold=500, metadata={})
