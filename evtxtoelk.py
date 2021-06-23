@@ -1,3 +1,5 @@
+import ssl
+from elasticsearch.connection import create_ssl_context
 import contextlib
 import mmap
 import traceback
@@ -16,6 +18,11 @@ import sys
 def save_last_record(secondLastLine):
     with open('./last_record.txt', "w") as last_record:
         last_record.write(secondLastLine)
+
+
+def save_number_of_items(number_of_items):
+    with open('./last_number_of_items.txt', "w") as last_record:
+        last_record.write(str(number_of_items))
 
 
 class EvtxToElk:
@@ -38,17 +45,29 @@ class EvtxToElk:
 
         # Sert à stocker et lire le dernier item
         last_record = None
-        last_record_timestamp = None
+        number_of_items_during_previous_exec = 0
+        i = 0
 
         # Permet d'indexer sur ElasticSearch si = True (empêche l'indexation d'un item déjà existant)
         can_add_new_items = False
-        i = 0
 
-        es = Elasticsearch([elk_ip])
+        context = create_ssl_context(cafile="/home/userone/evtxtoelk/ca.pem")
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        es = Elasticsearch(
+            ['host'],
+            http_auth=('user', 'password'),
+            scheme="https",
+            port=9200,
+            ssl_context=context,
+        )
+
         try:
             last_record = ''.join(open('last_record.txt').read().split('\n'))
+            number_of_items_during_previous_exec = int(open('last_number_of_items.txt').read())
+            print(str(number_of_items_during_previous_exec) + " items were indexed last time")
         except:
-            print("No records found, will index everything")
+            print("No file named last_number_of_items.txt, will index everything")
             can_add_new_items = True
 
         with open(filename) as infile:
@@ -132,9 +151,6 @@ class EvtxToElk:
                             #    "body": json.loads(json.dumps(log_line)),
                             #    "metadata": metadata
                             # })
-                            # with open('./append.json', "a") as appendjson: ## TODO Enlever ça à l'occasion
-                            #     appendjson.write(str(event_data))
-                            # appendjson.close()
 
                             if len(bulk_queue) == bulk_queue_len_threshold:
                                 print('Bulkingrecords to ES: ' + str(len(bulk_queue)))
@@ -149,18 +165,14 @@ class EvtxToElk:
                             # if i == 76:
                             #     print("SAVING")
                             #     save_last_record(xml)
-                            if compare_xml == last_record:
+                            if i == number_of_items_during_previous_exec:
+                                # if compare_xml == last_record:
                                 print("Yes")
                                 can_add_new_items = True
                             else:
                                 print("No")
 
-                        secondLastLine = lastLine
-                        lastLine = xml
                         i += 1
-                        # with open('./all.xml', "a") as alle:
-                        #     alle.write(str(xml))
-                        # alle.close()
 
                     except:
                         print("***********")
@@ -169,7 +181,7 @@ class EvtxToElk:
                         print(json.dumps(log_line, indent=2))
                         print("***********")
 
-                save_last_record(lastLine)
+                save_number_of_items(i)
 
                 # Check for any remaining records in the bulk queue
                 if len(bulk_queue) > 0:
@@ -193,4 +205,4 @@ if __name__ == "__main__":
     # # Parse arguments and call evtx to elk class
     # args = parser.parse_args()
     # EvtxToElk.evtx_to_elk(args.evtxfile, args.elk_ip, elk_index=args.i, bulk_queue_len_threshold=int(args.s), metadata=args.meta)
-    EvtxToElk.evtx_to_elk("./test/pre-Security.evtx", "localhost", elk_index="hostlogs", bulk_queue_len_threshold=500, metadata={})
+    EvtxToElk.evtx_to_elk("/home/", "", elk_index="hostlogs", bulk_queue_len_threshold=500, metadata={})
